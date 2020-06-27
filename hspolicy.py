@@ -176,7 +176,9 @@ def get_open_source(team, aff=True, neg=True):
     return open_sources
 
 
-def execute(callback, wiki, school_re, team_re, side, ignore_case=True):
+def iterate(wiki, school_re, team_re, side, ignore_case=True, callback=None):
+    open_sources = []
+
     # compile regular expressions
     re_flag = re.IGNORECASE if ignore_case else 0
     school_re = re.compile(school_re, re_flag)
@@ -195,7 +197,11 @@ def execute(callback, wiki, school_re, team_re, side, ignore_case=True):
             print(8 * "*", team.last_names)
             for open_source in get_open_source(team, **side):
                 print(12 * "*", open_source.filename)
-                callback(open_source)
+                open_sources.append(open_source)
+                if callback is not None:
+                    callback(open_source)
+
+    return open_sources
 
 
 def download(open_source):
@@ -232,4 +238,4 @@ if __name__ == '__main__':
     if args.epic_gamer_moment is not None:
         print(get_epic_gamer_moment(args.epic_gamer_moment))
     else:
-        execute(download, HS_WIKI, args.school, args.team, args.side)
+        iterate(HS_WIKI, args.school, args.team, args.side, callback=download)

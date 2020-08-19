@@ -1,3 +1,4 @@
+import re
 import requests
 import sys
 import datetime as dt
@@ -29,3 +30,12 @@ def current_time():
     minute = str(now.minute).zfill(2)
     second = str(now.second).zfill(2)
     return "-".join([year, month, day, hour, minute, second])
+
+
+def clean_filename(unclean_name: str) -> str:
+    """
+    Return a valid filename where any character that is not
+    a letter, number, dash, underscore, space, or period
+    is replaced with an underscore
+    """
+    return re.sub(r'[^\w\-_. ]', '_', unclean_name)

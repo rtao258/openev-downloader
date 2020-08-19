@@ -8,6 +8,7 @@ import argparse
 import requests
 from bs4 import BeautifulSoup as bs
 
+import util
 # for those epic gamer moments
 from epic_gamer_moment import get_epic_gamer_moment
 
@@ -208,10 +209,9 @@ def download(open_source):
     path = os.path.join(OUTPUT_DIR, open_source.school.name,
                         open_source.team.last_names, open_source.side)
     os.makedirs(path, exist_ok=True)
-
     downloaded = requests.get(open_source.url).content
-
-    path = os.path.join(path, open_source.filename)
+    filename = util.clean_filename(open_source.filename)
+    path = os.path.join(path, filename)
     with open(path, 'wb') as file:
         file.write(downloaded)
 

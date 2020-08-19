@@ -7,7 +7,6 @@ from bs4 import BeautifulSoup as bs
 from typing import Sequence
 
 import os
-import shutil
 import argparse
 
 import util
@@ -38,6 +37,7 @@ class File:
         """
         if name is None:
             name = self.name
+        name = util.clean_filename(name)
         r = util.get_or_stop(self.url)
         path_to_file = os.path.join(path, f'{name}.docx')
         with open(path_to_file, 'wb') as output_file:

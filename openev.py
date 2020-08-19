@@ -11,7 +11,7 @@ import argparse
 
 import util
 
-DEFAULT_OUTPUT_DIRECTORY = 'output'
+DEFAULT_OUTPUT_DIRECTORY = os.path.join('output', 'openev')
 
 
 class File:

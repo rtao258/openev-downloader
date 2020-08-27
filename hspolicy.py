@@ -5,14 +5,16 @@
 import os
 import re
 import argparse
+from typing import Sequence
 import requests
+import bs4
 from bs4 import BeautifulSoup as bs
 
 import util
 # for those epic gamer moments
 from epic_gamer_moment import get_epic_gamer_moment
 
-OUTPUT_DIR = os.path.join('output', 'wiki')
+DEFAULT_OUTPUT_DIRECTORY = os.path.join('output', 'wiki')
 
 
 class Wiki:
@@ -32,9 +34,11 @@ def get_table_by_id(soup, id):
     :return: a 2D array of td
     """
     # dont include .tbody after the find() for some reason
-    rows = soup.find(id=id).find_all('tr')[1:]
-    table = [row.contents for row in rows]
-    return table
+    html_table = soup.find(id=id)
+    if html_table is None:
+        return None
+    rows = html_table.find_all('tr')[1:]
+    return [row.contents for row in rows]
 
 
 class School:
@@ -114,11 +118,12 @@ def get_teams(school):
     teams = []
     soup = bs(requests.get(school.url).text, features='html.parser')
     table = get_table_by_id(soup, 'tblTeams')
-    for row in table:
-        debater1, debater2 = parse_debater_names(row[0].div.p.text[len(school.name) + 1:])
-        aff_url_part = row[1].span.a['href']
-        neg_url_part = row[2].span.a['href']
-        teams.append(Team(school, debater1, debater2, aff_url_part, neg_url_part))
+    if table is not None:
+        for row in table:
+            debater1, debater2 = parse_debater_names(row[0].div.p.text[len(school.name) + 1:])
+            aff_url_part = row[1].span.a['href']
+            neg_url_part = row[2].span.a['href']
+            teams.append(Team(school, debater1, debater2, aff_url_part, neg_url_part))
     return teams
 
 
@@ -139,6 +144,16 @@ class OpenSource:
     def wiki(self):
         return self.team.wiki
 
+    def download(self):
+        path = os.path.join(DEFAULT_OUTPUT_DIRECTORY, self.school.name,
+                            self.team.last_names, self.side)
+        os.makedirs(path, exist_ok=True)
+        downloaded = requests.get(self.url).content
+        filename = util.clean_filename(self.filename)
+        path = os.path.join(path, filename)
+        with open(path, 'wb') as file:
+            file.write(downloaded)
+
 
 def interpret_side(side):
     if side == 'both':
@@ -150,34 +165,47 @@ def interpret_side(side):
     raise ValueError(f"invalid input {side} (must be 'aff', 'neg', or 'both')")
 
 
-def get_open_source(team, aff=True, neg=True):
+def get_open_source_from_table(
+        table: Sequence[Sequence[bs4.element.Tag]],
+        team: Team,
+        side: str,
+) -> Sequence[OpenSource]:
+    """Hi I'm just a helper function don't mind me"""
     open_sources = []
+    for row in table:
+        anchor = row[0].div.p.span.a
+        filename = anchor.text
+        url = anchor['href']
+        date = row[1].div.p.text
+        uploader = row[2].div.p.text
+        open_source = OpenSource(team, side, filename, url, date, uploader)
+        open_sources.append(open_source)
+    return open_sources
+
+
+def get_open_source(team: Team, aff=True, neg=True):
+    """
+    Get open source files given a team and optionally only from a particular side
+    """
+
+    open_sources = []
+
     if aff:
         soup = bs(requests.get(team.aff_url).text, features='html.parser')
         table = get_table_by_id(soup, 'tblOpenSource')
-        for row in table:
-            anchor = row[0].div.p.span.a
-            filename = anchor.text
-            url = anchor['href']
-            date = row[1].div.p.text
-            uploader = row[2].div.p.text
-            open_source = OpenSource(team, "aff", filename, url, date, uploader)
-            open_sources.append(open_source)
+        if table is not None:
+            open_sources.extend(get_open_source_from_table(table, team, 'aff'))
+
     if neg:
         soup = bs(requests.get(team.neg_url).text, features='html.parser')
         table = get_table_by_id(soup, 'tblOpenSource')
-        for row in table:
-            anchor = row[0].div.p.span.a
-            filename = anchor.text
-            url = anchor['href']
-            date = row[1].div.p.text
-            uploader = row[2].div.p.text
-            open_sources.append(OpenSource(team, "neg", filename, url, date, uploader))
+        if table is not None:
+            open_sources.extend(get_open_source_from_table(table, team, 'neg'))
 
     return open_sources
 
 
-def iterate(wiki, school_re, team_re, side, ignore_case=True, callback=None):
+def iterate(wiki: Wiki, school_re: str, team_re: str, side: str, ignore_case=True, callback=None):
     open_sources = []
 
     # compile regular expressions
@@ -205,22 +233,12 @@ def iterate(wiki, school_re, team_re, side, ignore_case=True, callback=None):
     return open_sources
 
 
-def download(open_source):
-    path = os.path.join(OUTPUT_DIR, open_source.school.name,
-                        open_source.team.last_names, open_source.side)
-    os.makedirs(path, exist_ok=True)
-    downloaded = requests.get(open_source.url).content
-    filename = util.clean_filename(open_source.filename)
-    path = os.path.join(path, filename)
-    with open(path, 'wb') as file:
-        file.write(downloaded)
-
-
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser()
 
     # filters
-    argparser.add_argument("-w", "--wiki", default="hs", choices=["hs", "college"], help="hs or college wiki")
+    argparser.add_argument("-w", "--wiki", default="hs", choices=["hs", "college"],
+                           help="hs or college wiki")
     argparser.add_argument("-s", "--school", default="",
                            help="regular expression to filter the list of schools")
     argparser.add_argument("-t", "--team", default="",
@@ -238,4 +256,4 @@ if __name__ == '__main__':
     if args.epic_gamer_moment is not None:
         print(get_epic_gamer_moment(args.epic_gamer_moment))
     else:
-        iterate(HS_WIKI, args.school, args.team, args.side, callback=download)
+        iterate(HS_WIKI, args.school, args.team, args.side, callback=OpenSource.download)
